@@ -4,6 +4,7 @@ import type { ChatSessionsExport } from '@proj-airi/stage-ui/types/chat-session'
 import type { Tool } from '@xsai/shared-chat'
 import type { Ref } from 'vue'
 
+import { createVoiceChatCascade } from '@proj-airi/stage-ui/composables/audio/voiceChatCascade'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { computed, ref } from 'vue'
@@ -186,7 +187,7 @@ vi.mock('./tools/builtin/image-journal', () => ({
 }))
 
 describe('useChatSyncStore', async () => {
-  const { useChatSyncStore } = await import('./chat-sync')
+  const { createVoiceIngestCommand, useChatSyncStore } = await import('./chat-sync')
 
   function initializeAuthorityAndFollower() {
     const authorityStore = useChatSyncStore()
@@ -256,6 +257,39 @@ describe('useChatSyncStore', async () => {
   afterEach(() => {
     vi.unstubAllGlobals()
     MockBroadcastChannel.reset()
+  })
+
+  it('ingests one aggregated voice turn with voice source metadata', async () => {
+    mockState.ingest.mockResolvedValueOnce(undefined)
+    const store = useChatSyncStore()
+    store.initialize('authority')
+    const cascade = createVoiceChatCascade({
+      isSuppressed: () => false,
+      postSpeakerCaption: vi.fn(),
+      sendTextToChat: text => store.requestIngest(createVoiceIngestCommand(text)),
+    })
+
+    cascade.handleStreamingSentenceEnd('帮我找一下')
+    cascade.handleStreamingSentenceEnd('附近的铁矿')
+    await cascade.flushNow()
+
+    expect(mockState.ingest).toHaveBeenCalledOnce()
+    expect(mockState.ingest).toHaveBeenCalledWith(
+      '帮我找一下附近的铁矿',
+      expect.objectContaining({
+        input: {
+          type: 'input:text:voice',
+          data: {
+            'transcription': '帮我找一下附近的铁矿',
+            'stage-tamagotchi': true,
+          },
+        },
+        tools: undefined,
+      }),
+      undefined,
+    )
+
+    store.dispose()
   })
 
   // https://github.com/moeru-ai/airi/issues/2087

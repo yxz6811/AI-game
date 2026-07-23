@@ -95,6 +95,10 @@ export function createPlaybackManager<TAudio>(
     | 'overflow'
     | 'owner-overflow'
     | undefined {
+    // Global saturation decides whether work queues before an owner policy can steal.
+    if (active.size >= maxVoices)
+      return 'overflow'
+
     if (
       maxVoicesPerOwner
       && item.ownerId
@@ -103,9 +107,6 @@ export function createPlaybackManager<TAudio>(
     ) {
       return 'owner-overflow'
     }
-
-    if (active.size >= maxVoices)
-      return 'overflow'
 
     return undefined
   }
@@ -269,7 +270,9 @@ export function createPlaybackManager<TAudio>(
           break
         case 'steal-oldest':
           stealOldest(next.item, blocked)
-          break
+          // Stealing starts the queued item and frees another slot. Leave later
+          // queued work for the next terminal event instead of draining twice.
+          return
         case 'steal-lowest-priority':
           stealLowestPriority(next.item)
           break
@@ -372,8 +375,6 @@ export function createPlaybackManager<TAudio>(
       if (entry.item.intentId === intentId)
         interrupt(entry, reason, { allowStartWaiting: false })
     }
-
-    tryStartWaiting()
   }
 
   function stopByOwner(ownerId: string, reason = 'stop-by-owner') {

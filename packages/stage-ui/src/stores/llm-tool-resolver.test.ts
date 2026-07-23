@@ -7,8 +7,15 @@ import { resolveLlmTools, toolNameFrom } from './llm-tool-resolver'
 // The default (non-injected) web-search branch reads the module store and the
 // tools barrel; mock both so the configured-gate + key-trim logic can be
 // exercised without real Pinia state or a live Tavily factory.
-const { createWebSearchToolsMock, useWebSearchStoreMock } = vi.hoisted(() => ({
+const {
+  createWebSearchToolsMock,
+  sendServerChannelEventMock,
+  useModsServerChannelStoreMock,
+  useWebSearchStoreMock,
+} = vi.hoisted(() => ({
   createWebSearchToolsMock: vi.fn(),
+  sendServerChannelEventMock: vi.fn(),
+  useModsServerChannelStoreMock: vi.fn(),
   useWebSearchStoreMock: vi.fn(),
 }))
 
@@ -19,6 +26,10 @@ vi.mock('../tools', async (importOriginal) => {
 
 vi.mock('./modules/web-search', () => ({
   useWebSearchStore: useWebSearchStoreMock,
+}))
+
+vi.mock('./mods/api/channel-server', () => ({
+  useModsServerChannelStore: useModsServerChannelStoreMock,
 }))
 
 function createTool(name: string, description = `${name} description`): Tool {
@@ -45,6 +56,43 @@ describe('toolNameFrom', () => {
 })
 
 describe('resolveLlmTools', () => {
+  beforeEach(() => {
+    sendServerChannelEventMock.mockReset()
+    useModsServerChannelStoreMock.mockReset()
+    useModsServerChannelStoreMock.mockReturnValue({
+      send: sendServerChannelEventMock,
+    })
+  })
+
+  it('routes the default spark command tool to the Minecraft service', async () => {
+    const tools = await resolveLlmTools({
+      builtInTools: [],
+      debugTools: [],
+      webSearchTools: [],
+      activeTools: [],
+    })
+
+    expect(tools).toHaveLength(1)
+
+    await tools[0].execute({
+      destinations: ['hallucinated-destination'],
+      interrupt: 'soft',
+      priority: 'normal',
+      intent: 'action',
+      ack: null,
+      parentEventId: null,
+      guidance: null,
+      contexts: null,
+    }, { messages: [], toolCallId: 'tool-call-id' })
+
+    expect(sendServerChannelEventMock).toHaveBeenCalledWith({
+      type: 'spark:command',
+      data: expect.objectContaining({
+        destinations: ['minecraft-bot'],
+      }),
+    })
+  })
+
   it('prefers a later runtime tool with the same name over an earlier built-in tool', async () => {
     const builtInTool = createTool('duplicate_tool', 'Built-in version.')
     const runtimeTool = createTool('duplicate_tool', 'Runtime version.')

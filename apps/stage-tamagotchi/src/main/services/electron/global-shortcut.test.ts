@@ -156,6 +156,10 @@ async function setupMocks() {
 
 describe('setupGlobalShortcutService', () => {
   beforeEach(() => {
+    vi.unstubAllEnvs()
+    // This service test exercises the supported uiohook path. Native Wayland
+    // rejection is covered by global-shortcut-uiohook.test.ts.
+    vi.stubEnv('XDG_SESSION_TYPE', 'x11')
     vi.resetModules()
     vi.clearAllMocks()
     vi.restoreAllMocks()
