@@ -8,7 +8,8 @@ import type {
 import { fork } from 'node:child_process'
 import { realpathSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { dirname } from 'node:path'
+import { dirname, join, sep } from 'node:path'
+import { platform } from 'node:process'
 import { fileURLToPath } from 'node:url'
 
 import { errorMessageFromValue } from '../../utils/error-message'
@@ -22,6 +23,14 @@ const require = createRequire(import.meta.url)
 const SANDBOX_WORKER_ENTRY_PATH = realpathSync(fileURLToPath(new URL('./js-planner-worker.ts', import.meta.url)))
 const ISOLATED_VM_ENTRY_PATH = realpathSync(require.resolve('isolated-vm'))
 const SANDBOX_SOURCE_DIRECTORY = realpathSync(dirname(SANDBOX_WORKER_ENTRY_PATH))
+// NOTICE:
+// Node 24 reads the nearest package.json to determine the TypeScript worker's ESM package scope.
+// Directory grants also need an explicit wildcard, and node-gyp-build probes Alpine's marker on Linux.
+// Without these reads, the permission sandbox rejects startup before isolated-vm is created.
+// Source/context: Node permission error from js-planner.test.ts and the Minecraft runtime.
+// Remove when the worker ships as JavaScript with an explicit module format that needs no package lookup.
+const MINECRAFT_PACKAGE_JSON_PATH = realpathSync(fileURLToPath(new URL('../../../package.json', import.meta.url)))
+const LINUX_ALPINE_RELEASE_PATH = join(sep, 'etc', 'alpine-release')
 
 function ancestorPath(path: string, levels: number): string {
   let current = path
@@ -68,8 +77,10 @@ export async function executeSandboxWorker(
       execArgv: [
         '--permission',
         '--allow-addons',
-        `--allow-fs-read=${SANDBOX_SOURCE_DIRECTORY}`,
-        `--allow-fs-read=${PNPM_MODULE_STORE_PATH}`,
+        `--allow-fs-read=${join(SANDBOX_SOURCE_DIRECTORY, '*')}`,
+        `--allow-fs-read=${MINECRAFT_PACKAGE_JSON_PATH}`,
+        `--allow-fs-read=${join(PNPM_MODULE_STORE_PATH, '*')}`,
+        ...(platform === 'linux' ? [`--allow-fs-read=${LINUX_ALPINE_RELEASE_PATH}`] : []),
         '--disable-proto=throw',
         '--frozen-intrinsics',
         '--experimental-transform-types',
