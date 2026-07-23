@@ -100,13 +100,9 @@ async function resolveSparkCommandTools(sparkCommandTools?: ToolSource): Promise
 
   const modsServerChannelStore = useModsServerChannelStore()
   const sendSparkCommand = (command: WebSocketEvents['spark:command']) => {
-    // TODO(@nekomeowww): instruct the LLM to understand what destination is.
-    // Currently without skill like prompt injection, many issues occur.
-    // destination mostly are wrong or hallucinated, we need to find a way to make it more reliable.
-    //
-    // For now, since destinations as array will always broadcast to all connected modules/agents, we can set it to
-    // empty array to avoid wrong routing.
-    command.destinations = []
+    // The model may hallucinate peer names. Minecraft is currently the only consumer of this
+    // built-in action tool, so enforce its registered service name at the transport boundary.
+    command.destinations = ['minecraft-bot']
 
     modsServerChannelStore.send({
       type: 'spark:command',

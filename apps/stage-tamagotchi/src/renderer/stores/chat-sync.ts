@@ -50,6 +50,25 @@ interface IngestCommandPayload {
   toolset?: ToolsetId
 }
 
+/**
+ * Builds the chat command envelope for text produced by desktop STT.
+ *
+ * The explicit voice event preserves source telemetry while the plain `text`
+ * field remains the canonical chat input consumed by the orchestrator.
+ */
+export function createVoiceIngestCommand(text: string): IngestCommandPayload {
+  return {
+    text,
+    input: {
+      type: 'input:text:voice',
+      data: {
+        'transcription': text,
+        'stage-tamagotchi': true,
+      },
+    },
+  }
+}
+
 interface SpotlightIngestPayload {
   text: string
 }

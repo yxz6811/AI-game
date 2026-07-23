@@ -12,7 +12,6 @@ import {
   useElectronMouseInWindow,
   useElectronRelativeMouse,
 } from '@proj-airi/electron-vueuse'
-import { createTranscriptBuffer } from '@proj-airi/pipelines-audio'
 import { IS_DEV } from '@proj-airi/stage-shared'
 import { useModelStore, useThreeSceneIsTransparentAtPoint } from '@proj-airi/stage-ui-three'
 import { HoloCoupon } from '@proj-airi/stage-ui/components'
@@ -21,7 +20,7 @@ import {
   resolveComponentStateToRuntimePhase,
 } from '@proj-airi/stage-ui/components/scenarios/settings/model-settings/runtime'
 import { WidgetStage } from '@proj-airi/stage-ui/components/scenes'
-import { useVoiceInputSession } from '@proj-airi/stage-ui/composables'
+import { createVoiceChatCascade, useVoiceInputSession } from '@proj-airi/stage-ui/composables'
 import { useCanvasPixelIsTransparentAtPoint } from '@proj-airi/stage-ui/composables/canvas-alpha'
 import { useSpeakingStore } from '@proj-airi/stage-ui/stores/audio'
 import { useHearingSpeechInputPipeline, useHearingStore } from '@proj-airi/stage-ui/stores/modules/hearing'
@@ -38,7 +37,7 @@ import StatusIsland from '../components/stage-islands/status-island/index.vue'
 
 import { electronOpenOnboarding } from '../../shared/eventa'
 import { modelSettingsRuntimeSnapshotChannelName } from '../../shared/model-settings-runtime'
-import { useChatSyncStore } from '../stores/chat-sync'
+import { createVoiceIngestCommand, useChatSyncStore } from '../stores/chat-sync'
 import { useControlsIslandStore } from '../stores/controls-island'
 import { useStageWindowLifecycleStore } from '../stores/stage-window-lifecycle'
 import { shouldSampleStageTransparency } from '../utils/stage-three-transparency'
@@ -299,12 +298,10 @@ const { error: transcriptionError, supportsStreamInput } = storeToRefs(hearingPi
 const chatSyncStore = useChatSyncStore()
 const streamingTranscriptionUnavailable = ref(false)
 const shouldUseStreamInput = computed(() => supportsStreamInput.value && !!stream.value && !streamingTranscriptionUnavailable.value)
-const voiceTranscriptBuffer = createTranscriptBuffer({
-  flushDelayMs: 1200,
-  maxBufferedTextLength: 90,
-  async flush(text) {
-    await sendVoiceInputTextToChat(text)
-  },
+const voiceChatCascade = createVoiceChatCascade({
+  isSuppressed: isVoiceInputSuppressed,
+  postSpeakerCaption,
+  sendTextToChat: sendVoiceInputTextToChat,
 })
 
 const assistantSpeechSuppressedUntil = shallowRef(0)
@@ -476,32 +473,11 @@ function postSpeakerCaption(text: string) {
  */
 async function sendVoiceInputTextToChat(text: string) {
   try {
-    await chatSyncStore.requestIngest({ text })
+    await chatSyncStore.requestIngest(createVoiceIngestCommand(text))
   }
   catch (err) {
     reportVoiceInputFailure('send to chat', err)
   }
-}
-
-/** Sends completed streaming-ASR sentences to captions and chat. */
-function handleStreamingSentenceEnd(delta: string) {
-  if (isVoiceInputSuppressed())
-    return
-
-  const finalText = delta
-  if (!finalText || !finalText.trim())
-    return
-
-  postSpeakerCaption(finalText)
-  void sendVoiceInputTextToChat(finalText)
-}
-
-/** Publishes the provider's final streaming-ASR text to the caption overlay. */
-function handleStreamingSpeechEnd(text: string) {
-  if (isVoiceInputSuppressed())
-    return
-
-  postSpeakerCaption(text)
 }
 
 /** Reads the listening generation attached to recorder-backed transcription metadata. */
@@ -516,9 +492,8 @@ const voiceInputSession = useVoiceInputSession(stream, {
   inspectAfterTranscription: ({ metadata }) => inspectVoiceInputProviderRequestGate(getVoiceInputGeneration(metadata)),
   onRecordingReady: () => ({ generation: voiceInputGeneration }),
   onTranscriptionResult: ({ text }) => {
-    postSpeakerCaption(text)
+    voiceChatCascade.handleRecordingTranscript(text)
     toast(`Voice input transcribed: ${text}`)
-    voiceTranscriptBuffer.push(text)
   },
   onTranscriptionEmpty: () => {
     if (transcriptionError.value) {
@@ -553,8 +528,8 @@ async function startAudioInteractionConsumers() {
       return
 
     await transcribeForMediaStream(currentStream, {
-      onSentenceEnd: handleStreamingSentenceEnd,
-      onSpeechEnd: handleStreamingSpeechEnd,
+      onSentenceEnd: voiceChatCascade.handleStreamingSentenceEnd,
+      onSpeechEnd: voiceChatCascade.handleStreamingSpeechEnd,
     })
 
     if (inspectVoiceInputStreamingRequestGate().skip) {
@@ -588,9 +563,9 @@ async function stopAudioInteractionConsumers(options: StopAudioInteractionOption
   ])
 
   if (flushTranscript)
-    await voiceTranscriptBuffer.dispose()
+    await voiceChatCascade.dispose()
   else
-    voiceTranscriptBuffer.clear()
+    voiceChatCascade.clear()
 }
 
 watch(enabled, async (val) => {
