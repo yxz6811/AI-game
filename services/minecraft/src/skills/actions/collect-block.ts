@@ -9,6 +9,7 @@ import { useLogger } from '../../utils/logger'
 import { breakBlockAt } from '../blocks'
 import { patchedGoto } from '../patched-goto'
 import { getNearestBlocks } from '../world'
+import { assertSafeToMine, shouldAbortMining } from './air-safety'
 import { expandCollectibleBlockAliases } from './block-type-normalizer'
 import { ensurePickaxe } from './ensure'
 import { pickupNearbyItems } from './world-interactions'
@@ -36,6 +37,11 @@ export async function collectBlock(
   let collected = 0
 
   while (collected < num) {
+    if (shouldAbortMining(mineflayer)) {
+      logger.log('Aborting collect: hazard (lava/low oxygen).')
+      assertSafeToMine(mineflayer)
+    }
+
     const blocks = getNearestBlocks(mineflayer, [...blockTypes], range)
 
     if (blocks.length === 0) {
@@ -107,8 +113,8 @@ export async function collectBlock(
         break
       }
 
-      if (err instanceof ActionError && (err.code === 'CRAFTING_FAILED' || err.code === 'RESOURCE_MISSING')) {
-        // Don't get stuck in retry loop
+      if (err instanceof ActionError && (err.code === 'CRAFTING_FAILED' || err.code === 'RESOURCE_MISSING' || err.code === 'INTERRUPTED')) {
+        // Don't get stuck in retry loop；INTERRUPTED=溺水/熔岩，立刻让路给逃生反射
         throw err
       }
 

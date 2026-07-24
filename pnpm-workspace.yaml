@@ -9,6 +9,7 @@ packages:
   - docs/**
   - engines/**
   - apps/**
+  - hackathon-services/**
   - '!**/dist/**'
 overrides:
   array-flatten: npm:@nolyfill/array-flatten@^1.0.44

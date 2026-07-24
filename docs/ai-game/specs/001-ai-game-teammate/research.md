@@ -32,15 +32,20 @@
 
 ---
 
-## 2. 全双工语音打断的实现路径（对应 User Story 2 / FR-009~014）
+## 2. 真全双工语音架构（对应 User Story 2）
 
-**Decision**: 复用 AIRI 已有的 VAD/STT/TTS 模块与 `unspeech` 统一音频代理；打断信号的传播复用 Reflex 层已有的"抑制信号"机制，将其扩展为"打断事件"的传递通道，贯穿 Conscious 层正在进行的 LLM 调用与 Action 层正在执行的任务。
+**Decision（2026-07-23 修订）**: 第二层 A 采用 **真全双工双流架构**，详见 [`contracts/full-duplex-architecture.md`](./contracts/full-duplex-architecture.md)。**默认组装**：**openbmb/MiniCPM-o-4_5**（Brain A，经 [MiniCPM-o-Demo](https://github.com/OpenBMB/MiniCPM-o-Demo) Gateway/Realtime Audio Full-Duplex）+ 本仓库 **Intent Bridge → `@proj-airi/server-sdk` → minecraft-bot**（Brain B）；Moshi/PersonaPlex 为备胎。**不**采用 Unmute / STT→LLM→TTS 级联作为主路径。
 
-**Rationale**：AIRI 主仓库已确认存在 VAD、多种 STT 方案、TTS（ElevenLabs/Azure/OpenAI/本地 Kokoro）与 `unspeech` 统一音频处理代理，第二层不需要从零选型语音技术栈。真正的新增工作是"打断"这一跨层行为——`brain.ts` 已经有"事件队列编排"与"安全/预算护栏"的概念，`reflex-manager.ts` 已经有"抑制信号可阻止意识层处理"的机制，两者结合起来正好是打断/取消所需要的信号通路：玩家开口说话 → Reflex 层的语音活动检测触发抑制信号 → 该信号既中断 TTS 播放，也中断 Conscious 层正在进行的 LLM 轮次与 Action 层正在执行的任务（触发 Task State 的取消令牌）。
+**Rationale**：
+- 级联 + barge-in 本质是可打断的半双工，与真全双工不是同一架构。
+- MiniCPM-o 4.5 在开源侧提供更强的双语/多模态全双工与官方可部署 Demo；**双工路径仍以旁路 tool 接 MC**（不假设原生 FC 已就绪）。
+- 全双工进程与第一层解耦：关闭后第一层演示仍可运行。
 
 **Alternatives Considered**：
-- *另建一套独立的打断信号总线，不复用 Reflex 层机制*：会造成两套"中断/抑制"语义并存，增加维护与理解成本，排除。
-- *仅在 TTS 层做打断（只停止播放，不取消游戏任务）*：不满足 FR-012（动作取消/重规划），且 PRD2 明确要求"等等/停下/回来"能同时停止旧动作，排除。
+- *PersonaPlex + LiveKit（前一版默认）*：真双流可部署，但英主、无官方中文优势；已降为备胎。
+- *级联半双工*：已明确非主路径。
+- *等待一体 S2S+FC*：不阻塞交付。
+- *仅用托管 Realtime*：P1 逃生舱。
 
 ---
 

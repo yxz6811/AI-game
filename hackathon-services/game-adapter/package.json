@@ -1,0 +1,21 @@
+{
+  "name": "@hackathon/game-adapter",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Unified Game Adapter contract + Minecraft/DST implementations (Phase 5 / US3)",
+  "exports": {
+    ".": "./src/contract/types.ts",
+    "./contract/*": "./src/contract/*",
+    "./minecraft-adapter": "./src/minecraft-adapter/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test tests/contract/*.test.ts tests/minecraft-adapter/*.test.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.21",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3"
+  }
+}

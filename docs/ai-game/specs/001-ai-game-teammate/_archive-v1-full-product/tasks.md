@@ -183,15 +183,15 @@ services/player-voice-client/ # 玩家端语音采集/播放
 
 **Independent Test**: 在跑图或关卡间歇独立发起游戏相关及适度游戏外话题，验证自然接话、人设一致性、身份披露策略是否按预期工作（对应 quickstart.md 场景 C）。
 
-- [ ] T086 [US3] 实现人设/性格配置加载（背景故事、性格风格，FR-013/CP-03）于 `services/strategy-service/src/persona/config.py` — 优先级：P1，预估：2h
-- [ ] T087 [US3] 编写游戏内容闲聊系统提示词（FR-020）于 `services/strategy-service/src/persona/game_chat.py` — 优先级：P1，预估：2h（依赖 T086）
-- [ ] T088 [US3] 实现游戏外话题边界与敏感话题转移逻辑（FR-021）于 `services/strategy-service/src/persona/topic_boundary.py` — 优先级：P1，预估：2h（依赖 T086）
-- [ ] T089 [US3] 实现身份披露折中策略（玩笑维持角色 vs 认真如实告知的语气判断，FR-022）于 `services/strategy-service/src/persona/disclosure_policy.py` — 优先级：P1，预估：2.5h（依赖 T086）
-- [ ] T090 [US3] 实现情景语气动态调整（危险紧张/胜利欢呼/陪伴平和，FR-014）于 `services/strategy-service/src/persona/tone_modulator.py` — 优先级：P2，预估：2h（依赖 T030, T086）
-- [ ] T091 [US3] 端到端联调：游戏相关闲聊验证（quickstart.md 场景 C-1） — 优先级：P2，预估：2h（依赖 T087）
-- [ ] T092 [US3] 端到端联调：游戏外话题边界验证（quickstart.md 场景 C-2） — 优先级：P2，预估：1.5h（依赖 T088）
-- [ ] T093 [US3] 端到端联调：身份披露策略验证（quickstart.md 场景 C-3） — 优先级：P1，预估：1.5h（依赖 T089）
-- [ ] T094 [P] [US3] 编写身份披露策略单元测试（玩笑 vs 认真语气判断）于 `services/strategy-service/tests/unit/test_disclosure_policy.py` — 优先级：P2，预估：2h
+- [x] T086 [US3] 实现人设/性格配置加载（背景故事、性格风格，FR-013/CP-03）于 `services/strategy-service/src/persona/config.py` — 优先级：P1，预估：2h — **2026-07-23 适配落地：`hackathon-services/persona/src/config.ts` + `presets/`**
+- [x] T087 [US3] 编写游戏内容闲聊系统提示词（FR-020）于 `services/strategy-service/src/persona/game_chat.py` — 优先级：P1，预估：2h（依赖 T086） — **→ `hackathon-services/persona/src/game-chat.ts`**
+- [x] T088 [US3] 实现游戏外话题边界与敏感话题转移逻辑（FR-021）于 `services/strategy-service/src/persona/topic_boundary.py` — 优先级：P1，预估：2h（依赖 T086） — **→ `topic-boundary.ts`**
+- [x] T089 [US3] 实现身份披露折中策略（玩笑维持角色 vs 认真如实告知的语气判断，FR-022）于 `services/strategy-service/src/persona/disclosure_policy.py` — 优先级：P1，预估：2.5h（依赖 T086） — **→ `disclosure-policy.ts`**
+- [x] T090 [US3] 实现情景语气动态调整（危险紧张/胜利欢呼/陪伴平和，FR-014）于 `services/strategy-service/src/persona/tone_modulator.py` — 优先级：P2，预估：2h（依赖 T030, T086） — **→ `tone-modulator.ts`**
+- [x] T091 [US3] 端到端联调：游戏相关闲聊验证（quickstart.md 场景 C-1） — 优先级：P2，预估：2h（依赖 T087） — **策略层冒烟：`pnpm -C hackathon-services/persona probe:scenario-c`（完整语音 E2E 仍待 MiniCPM 联调）**
+- [x] T092 [US3] 端到端联调：游戏外话题边界验证（quickstart.md 场景 C-2） — 优先级：P2，预估：1.5h（依赖 T088） — **同上 probe C-2a/C-2b**
+- [x] T093 [US3] 端到端联调：身份披露策略验证（quickstart.md 场景 C-3） — 优先级：P1，预估：1.5h（依赖 T089） — **同上 probe C-3-joke/sincere**
+- [x] T094 [P] [US3] 编写身份披露策略单元测试（玩笑 vs 认真语气判断）于 `services/strategy-service/tests/unit/test_disclosure_policy.py` — 优先级：P2，预估：2h — **→ `hackathon-services/persona/tests/disclosure-policy.test.ts`**
 
 **Checkpoint**：User Story 1 + 2 + 3 均应可独立正常工作。
 

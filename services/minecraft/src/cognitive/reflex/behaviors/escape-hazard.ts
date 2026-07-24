@@ -3,8 +3,8 @@ import type { ReflexBehavior } from '../types/behavior'
 import { sleep } from '@moeru/std'
 import { Vec3 } from 'vec3'
 
-/** Oxygen (out of 20) at or below which the bot is drowning and must surface. */
-const LOW_OXYGEN = 6
+import { isHazardous, LOW_OXYGEN_ESCAPE } from '../../../skills/actions/air-safety'
+
 /** How far to look for a safe block to climb out onto. */
 const ESCAPE_RADIUS = 6
 /** Hard cap on one escape attempt so the reflex never hangs. */
@@ -79,11 +79,11 @@ function inLava(bot: any): boolean {
 }
 
 function drowning(bot: any): boolean {
-  return Boolean(bot.entity?.isInWater) && typeof bot.oxygenLevel === 'number' && bot.oxygenLevel <= LOW_OXYGEN
+  return Boolean(bot.entity?.isInWater) && typeof bot.oxygenLevel === 'number' && bot.oxygenLevel <= LOW_OXYGEN_ESCAPE
 }
 
 function inHazard(bot: any): boolean {
-  return inLava(bot) || drowning(bot)
+  return isHazardous(bot, LOW_OXYGEN_ESCAPE)
 }
 
 /**
@@ -92,6 +92,8 @@ function inHazard(bot: any): boolean {
  * a reflex. Drives the body directly with look + forward + jump (jump = swim up / climb), aiming at
  * the nearest safe block to stand on (or just straight up to surface when drowning in open water).
  * Sets reflexEngaged for the duration so auto-follow and auto-eat stay out of the way.
+ *
+ * NOTICE: 必须 stopDigging。挖矿循环的 dig 会占着身体，只 pathfinder.stop 无法上浮，会直接淹死。
  */
 export const escapeHazardBehavior: ReflexBehavior = {
   id: 'escape-hazard',
@@ -109,7 +111,11 @@ export const escapeHazardBehavior: ReflexBehavior = {
 
     escapeInFlight = true
     api.context.updateAutonomy({ reflexEngaged: true })
-    // Drop any in-progress goal (e.g. auto-follow) so it doesn't drag the bot back into the hazard.
+    // Drop dig + pathfinder so neither keeps the body underwater / in lava.
+    try {
+      bot.stopDigging?.()
+    }
+    catch {}
     try {
       bot.pathfinder?.stop?.()
     }

@@ -7,6 +7,7 @@ import { sleep } from '@moeru/std'
 import { Vec3 } from 'vec3'
 
 import { McData } from '../utils/mcdata'
+import { assertSafeToMine } from './actions/air-safety'
 import { log } from './base'
 import { goToPosition } from './movement'
 import { patchedGoto } from './patched-goto'
@@ -34,6 +35,9 @@ export async function breakBlockAt(
   }
 
   await moveIntoRange(mineflayer, block)
+
+  // 开挖前再查一次：水下缺氧 / 熔岩时把身体交给 escape-hazard，避免 dig 占死上浮
+  assertSafeToMine(mineflayer)
 
   if (mineflayer.isCreative) {
     return breakInCreative(mineflayer, block, x, y, z)

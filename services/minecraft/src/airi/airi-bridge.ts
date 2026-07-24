@@ -6,6 +6,23 @@ import { useLogg } from '@guiiai/logg'
 import { ContextUpdateStrategy } from '@proj-airi/server-sdk'
 import { nanoid } from 'nanoid'
 
+import { matchIdleDevelopCommand } from '../cognitive/idle-develop'
+import { errorMessageFromValue } from '../utils/error-message'
+
+/**
+ * 黑客松双工旁路：Intent Bridge 已判定的结构化动作，绕过 Conscious LLM。
+ *
+ * NOTICE:
+ * Why: spark:command 默认进 Brain 再调 GLM，实测 import→answer 约 5–6s，陪伴体验不可用。
+ * Root cause: AiriBridge 只发 signal:airi_command，必须等一轮 LLM 才落到 follow/stop。
+ * Source: duplex-voice GameTools + 终端实测（received → clearFollowTarget ≈ 6s）。
+ * Removal: 产品级 Brain B 原生 tool 闭环就绪后，可删此旁路，改回纯 guidance。
+ */
+export interface DirectAction {
+  tool: string
+  params?: Record<string, unknown>
+}
+
 interface SparkCommandData {
   commandId: string
   intent: 'plan' | 'proposal' | 'action' | 'pause' | 'resume' | 'reroute' | 'context'
@@ -14,7 +31,11 @@ interface SparkCommandData {
   guidance?: {
     options?: Array<{ label: string, steps: string[] }>
   }
+  /** 可选：结构化直达动作（协议扩展字段，总线透传） */
+  directAction?: DirectAction
 }
+
+export type DirectActionHandler = (action: DirectAction, cmd: SparkCommandData) => Promise<void> | void
 
 export class AiriBridge {
   private readonly logger = useLogg('airi-bridge').useGlobalConfig()
@@ -22,11 +43,19 @@ export class AiriBridge {
   private contextUpdateHandler: ((event: { data: ContextUpdate }) => void) | null = null
   private moduleAnnouncedHandler: ((event: { data: ModuleAnnouncedEvent }) => void) | null = null
   private readonly moduleAnnouncedListeners = new Set<(event: ModuleAnnouncedEvent) => void>()
+  private directActionHandler: DirectActionHandler | null = null
 
   constructor(
     private readonly client: Client,
     private readonly eventBus: EventBus,
   ) {}
+
+  /**
+   * 注册直达动作执行器（由 CognitiveEngine 在 TaskExecutor 就绪后注入）。
+   */
+  setDirectActionHandler(handler: DirectActionHandler | null): void {
+    this.directActionHandler = handler
+  }
 
   init(): void {
     this.commandHandler = (event) => {
@@ -195,12 +224,73 @@ export class AiriBridge {
       : (steps.length > 0 ? steps.join(' / ') : `${cmd.intent} command received`)
 
     const sourceId = 'airi'
+    // 无 structured directAction 时，从 guidance 文案推断空闲发育开关（AIRI 聊天/桌面也能直达）
+    const inferredDevelop = matchIdleDevelopCommand(message)
+    const directAction = cmd.directAction ?? (
+      inferredDevelop === 'enable'
+        ? { tool: 'idleDevelopEnable' as const, params: {} }
+        : inferredDevelop === 'disable'
+          ? { tool: 'idleDevelopDisable' as const, params: {} }
+          : undefined
+    )
+
+    // Fast path: Intent Bridge 已给出 tool，直接执行，不再唤醒 Conscious LLM。
+    if (directAction?.tool && this.directActionHandler) {
+      const startedAt = Date.now()
+      this.logger.log('Fast-path directAction (skip LLM)', {
+        commandId: cmd.commandId,
+        tool: directAction.tool,
+        params: directAction.params ?? {},
+      })
+
+      // 记入历史供后续闲聊上下文，但不发 airi_command（避免再跑一轮 Brain）。
+      this.eventBus.emit({
+        type: 'signal:airi_context',
+        payload: Object.freeze({
+          type: 'airi_context' as const,
+          description: `Direct action from AIRI: ${directAction.tool} ("${message}")`,
+          sourceId,
+          confidence: 1.0,
+          timestamp: Date.now(),
+          metadata: {
+            message,
+            sparkCommandId: cmd.commandId,
+            sparkIntent: cmd.intent,
+            directAction: true,
+            tool: directAction.tool,
+          },
+        }),
+        source: { component: 'airi', id: 'bridge' },
+      })
+
+      void Promise.resolve(this.directActionHandler(directAction, cmd))
+        .then(() => {
+          const elapsedMs = Date.now() - startedAt
+          this.sendEmit(cmd.commandId, 'done', `directAction ${directAction.tool} (${elapsedMs}ms)`)
+          this.logger.log('directAction completed', {
+            commandId: cmd.commandId,
+            tool: directAction.tool,
+            elapsedMs,
+          })
+        })
+        .catch((error: unknown) => {
+          const note = errorMessageFromValue(error)
+          this.sendEmit(cmd.commandId, 'dropped', `directAction failed: ${note}`)
+          this.logger.error(`directAction failed; falling back to LLM directive: ${note}`)
+          this.emitAiriCommand(cmd, message, sourceId)
+        })
+      return
+    }
 
     this.logger.log('Routing spark:command as an AIRI directive', {
       commandId: cmd.commandId,
       message,
     })
 
+    this.emitAiriCommand(cmd, message, sourceId)
+  }
+
+  private emitAiriCommand(cmd: SparkCommandData, message: string, sourceId: string): void {
     this.eventBus.emit({
       type: 'signal:airi_command',
       payload: Object.freeze({

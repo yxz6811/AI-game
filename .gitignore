@@ -35,6 +35,11 @@ lerna-debug.log*
 *.wav
 *.ogg
 *.mp3
+*.dmg
+
+# Local Minecraft / voice runtime artifacts
+demo/mc-server/.console_history
+demo/voice-runtime/Comni-*.dmg
 
 # Credentials
 cert*/
@@ -143,3 +148,24 @@ apps/stage-tamagotchi/electron.vite.config.*.mjs
 
 docs/ai/context/verifications/
 .playwright-mcp/
+
+# Gate 1 local Minecraft server artifacts
+demo/mc-server/*.jar
+demo/mc-server/demo_world/
+demo/mc-server/demo_world_nether/
+demo/mc-server/demo_world_the_end/
+demo/mc-server/cache/
+demo/mc-server/libraries/
+demo/mc-server/logs/
+demo/mc-server/versions/
+demo/mc-server/*.log
+demo/mc-server/ops.json
+demo/mc-server/banned-*.json
+demo/mc-server/usercache.json
+demo/mc-server/version_history.json
+demo/mc-server/commands.yml
+demo/mc-server/bukkit.yml
+demo/mc-server/spigot.yml
+demo/mc-server/config/
+demo/mc-server/plugins/
+demo/mc-server/world/

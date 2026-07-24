@@ -1,5 +1,5 @@
 import { Vec3 } from 'vec3'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { escapeHazardBehavior, findNearestSafeStand } from './escape-hazard'
 
@@ -56,6 +56,7 @@ describe('escapeHazardBehavior re-entry guard', () => {
       },
       oxygenLevel: 20,
       pathfinder: { stop() {} },
+      stopDigging: () => {},
       blockAt: () => null,
       lookAt: async () => {
         state.lava = false // simulate the bot climbing out partway through the attempt
@@ -70,5 +71,36 @@ describe('escapeHazardBehavior re-entry guard', () => {
     // a fresh hazard after the first escape must STILL trigger (was false before the fix)
     state.lava = true
     expect(escapeHazardBehavior.when(undefined as any, api)).toBe(true)
+  })
+
+  it('stops digging when escaping so mining cannot pin the body underwater', async () => {
+    // ROOT CAUSE:
+    // escape only called pathfinder.stop; dig kept running and cancelled swim-up controls → drown.
+    const stopDigging = vi.fn()
+    const pathStop = vi.fn()
+    let inWater = true
+    const bot: any = {
+      entity: {
+        get isInWater() {
+          return inWater
+        },
+        isInLava: false,
+        position: new Vec3(0, 60, 0),
+      },
+      oxygenLevel: 10,
+      pathfinder: { stop: pathStop },
+      stopDigging,
+      blockAt: () => null,
+      lookAt: async () => {
+        inWater = false
+      },
+      setControlState: () => {},
+    }
+    const api: any = { bot: { bot }, context: { updateAutonomy: () => {} } }
+
+    expect(escapeHazardBehavior.when(undefined as any, api)).toBe(true)
+    await escapeHazardBehavior.run(api)
+    expect(stopDigging).toHaveBeenCalled()
+    expect(pathStop).toHaveBeenCalled()
   })
 })

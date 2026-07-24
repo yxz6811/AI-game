@@ -69,6 +69,18 @@ export function expandCollectibleBlockAliases(name: string): string[] {
     result.add('grass_block')
   }
 
+  // 圆石目标：世界上多半是 stone 等岩层，挖开才掉 cobblestone
+  if (normalized === 'cobblestone' || normalized === 'stone') {
+    result.add('stone')
+    result.add('cobblestone')
+    result.add('andesite')
+    result.add('diorite')
+    result.add('granite')
+    result.add('deepslate')
+    result.add('tuff')
+    result.add('cobbled_deepslate')
+  }
+
   return [...result]
 }
 
